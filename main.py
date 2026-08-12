@@ -205,14 +205,27 @@ while True:
         # ASK LLM
         # =========================
 
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=messages,
-            tools=tools,
-            tool_choice="auto"
-        )
+        try:
+
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=messages,
+                tools=tools,
+                tool_choice="auto"
+            )
+
+        except Exception as e:
+
+            print("Agent Error:", e)
+
+            print(
+                "Agent: Sorry, I couldn't process that request right now."
+            )
+
+            break
 
         message = response.choices[0].message
+        print("TOOL CALLS:", message.tool_calls)
 
 
         # =========================

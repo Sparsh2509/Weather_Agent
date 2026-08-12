@@ -8,7 +8,14 @@ API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
 
 def get_weather(city: str):
+
     try:
+
+        if not API_KEY:
+            return {
+                "error": "OpenWeather API key is missing."
+            }
+
         url = "https://api.openweathermap.org/data/2.5/weather"
 
         params = {
@@ -23,12 +30,24 @@ def get_weather(city: str):
             timeout=10
         )
 
+        if response.status_code == 401:
+            return {
+                "error": "Invalid OpenWeather API key."
+            }
+
+        if response.status_code == 404:
+            return {
+                "error": f"City '{city}' was not found."
+            }
+
+        if response.status_code == 429:
+            return {
+                "error": "OpenWeather API rate limit exceeded."
+            }
+
         if response.status_code != 200:
             return {
-                "error": response.json().get(
-                    "message",
-                    "Weather API error"
-                )
+                "error": f"Weather API error: {response.status_code}"
             }
 
         data = response.json()
@@ -40,14 +59,34 @@ def get_weather(city: str):
             "weather": data["weather"][0]["description"]
         }
 
+    except requests.Timeout:
+
+        return {
+            "error": "Weather API request timed out."
+        }
+
     except requests.RequestException as e:
+
         return {
             "error": f"Weather API request failed: {str(e)}"
         }
 
+    except Exception as e:
+
+        return {
+            "error": f"Unexpected weather error: {str(e)}"
+        }
+
 
 def get_forecast(city: str):
+
     try:
+
+        if not API_KEY:
+            return {
+                "error": "OpenWeather API key is missing."
+            }
+
         url = "https://api.openweathermap.org/data/2.5/forecast"
 
         params = {
@@ -62,12 +101,24 @@ def get_forecast(city: str):
             timeout=10
         )
 
+        if response.status_code == 401:
+            return {
+                "error": "Invalid OpenWeather API key."
+            }
+
+        if response.status_code == 404:
+            return {
+                "error": f"City '{city}' was not found."
+            }
+
+        if response.status_code == 429:
+            return {
+                "error": "OpenWeather API rate limit exceeded."
+            }
+
         if response.status_code != 200:
             return {
-                "error": response.json().get(
-                    "message",
-                    "Forecast API error"
-                )
+                "error": f"Forecast API error: {response.status_code}"
             }
 
         data = response.json()
@@ -75,6 +126,7 @@ def get_forecast(city: str):
         forecast = []
 
         for item in data["list"][:8]:
+
             forecast.append({
                 "time": item["dt_txt"],
                 "temperature": item["main"]["temp"],
@@ -83,16 +135,41 @@ def get_forecast(city: str):
 
         return forecast
 
+    except requests.Timeout:
+
+        return {
+            "error": "Forecast API request timed out."
+        }
+
     except requests.RequestException as e:
+
         return {
             "error": f"Forecast API request failed: {str(e)}"
         }
 
+    except Exception as e:
+
+        return {
+            "error": f"Unexpected forecast error: {str(e)}"
+        }
+
 
 def get_air_quality(city: str):
+
     try:
-        # First get city coordinates
-        weather_url = "https://api.openweathermap.org/data/2.5/weather"
+
+        if not API_KEY:
+            return {
+                "error": "OpenWeather API key is missing."
+            }
+
+        # -------------------------
+        # GET CITY COORDINATES
+        # -------------------------
+
+        weather_url = (
+            "https://api.openweathermap.org/data/2.5/weather"
+        )
 
         params = {
             "q": city,
@@ -105,12 +182,24 @@ def get_air_quality(city: str):
             timeout=10
         )
 
+        if response.status_code == 401:
+            return {
+                "error": "Invalid OpenWeather API key."
+            }
+
+        if response.status_code == 404:
+            return {
+                "error": f"City '{city}' was not found."
+            }
+
+        if response.status_code == 429:
+            return {
+                "error": "OpenWeather API rate limit exceeded."
+            }
+
         if response.status_code != 200:
             return {
-                "error": response.json().get(
-                    "message",
-                    "Could not find city"
-                )
+                "error": f"Location API error: {response.status_code}"
             }
 
         data = response.json()
@@ -118,8 +207,13 @@ def get_air_quality(city: str):
         lat = data["coord"]["lat"]
         lon = data["coord"]["lon"]
 
-        # Get AQI
-        aqi_url = "https://api.openweathermap.org/data/2.5/air_pollution"
+        # -------------------------
+        # GET AIR QUALITY
+        # -------------------------
+
+        aqi_url = (
+            "https://api.openweathermap.org/data/2.5/air_pollution"
+        )
 
         aqi_params = {
             "lat": lat,
@@ -133,9 +227,19 @@ def get_air_quality(city: str):
             timeout=10
         )
 
+        if aqi_response.status_code == 401:
+            return {
+                "error": "Invalid OpenWeather API key."
+            }
+
+        if aqi_response.status_code == 429:
+            return {
+                "error": "Air quality API rate limit exceeded."
+            }
+
         if aqi_response.status_code != 200:
             return {
-                "error": "Air quality API error"
+                "error": f"Air quality API error: {aqi_response.status_code}"
             }
 
         aqi_data = aqi_response.json()["list"][0]
@@ -151,7 +255,20 @@ def get_air_quality(city: str):
             "no2": components["no2"]
         }
 
+    except requests.Timeout:
+
+        return {
+            "error": "Air quality API request timed out."
+        }
+
     except requests.RequestException as e:
+
         return {
             "error": f"Air quality request failed: {str(e)}"
+        }
+
+    except Exception as e:
+
+        return {
+            "error": f"Unexpected air quality error: {str(e)}"
         }

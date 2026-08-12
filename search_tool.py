@@ -15,6 +15,11 @@ def web_search(query: str):
 
     try:
 
+        if not TAVILY_API_KEY:
+            return {
+                "error": "Tavily API key is missing."
+            }
+
         response = client.search(
             query=query,
             max_results=5
