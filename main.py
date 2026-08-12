@@ -155,10 +155,7 @@ while True:
         "content": user_input
     })
 
-    save_message(
-        role="user",
-        content=user_input
-    )
+    save_message("user", user_input)
 
 
     # ---------------- FIRST LLM CALL ----------------
@@ -203,11 +200,6 @@ while True:
 
         messages.append(assistant_message)
 
-        save_message(
-            role="assistant",
-            content=message.content,
-            tool_calls=tool_calls_for_memory
-        )
 
 
         # ---------------- EXECUTE TOOLS ----------------
@@ -259,11 +251,6 @@ while True:
 
 
             # Save tool result
-            save_message(
-                role="tool",
-                content=tool_result,
-                tool_call_id=tool_call.id
-            )
 
 
         # ---------------- FINAL LLM CALL ----------------
@@ -282,13 +269,7 @@ while True:
             "content": answer
         })
 
-
-        # Save final answer
-        save_message(
-            role="assistant",
-            content=answer
-        )
-
+        save_message("assistant", answer)
 
         print("Agent:", answer)
 
