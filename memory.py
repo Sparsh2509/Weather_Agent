@@ -58,3 +58,49 @@ def load_messages():
         })
 
     return messages
+
+def save_summary(summary):
+    conn = sqlite3.connect("conversation.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS memory_summary (
+            id INTEGER PRIMARY KEY,
+            summary TEXT
+        )
+    """)
+
+    cursor.execute("""
+        INSERT OR REPLACE INTO memory_summary (id, summary)
+        VALUES (1, ?)
+    """, (summary,))
+
+    conn.commit()
+    conn.close()
+
+
+def load_summary():
+    conn = sqlite3.connect("conversation.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS memory_summary (
+            id INTEGER PRIMARY KEY,
+            summary TEXT
+        )
+    """)
+
+    cursor.execute("""
+        SELECT summary
+        FROM memory_summary
+        WHERE id = 1
+    """)
+
+    row = cursor.fetchone()
+
+    conn.close()
+
+    if row:
+        return row[0]
+
+    return ""

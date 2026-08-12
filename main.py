@@ -12,7 +12,9 @@ from weather_tool import (
 from memory import (
     create_database,
     save_message,
-    load_messages
+    load_messages,
+    save_summary,
+    load_summary
 )
 
 from search_tool import web_search
@@ -159,9 +161,25 @@ Rules:
 
 messages = [system_message]
 
+# Load old conversation summary
+summary = load_summary()
+
+if summary:
+    messages.append({
+        "role": "system",
+        "content": f"""
+Previous conversation summary:
+
+{summary}
+
+Use this summary only when it is relevant to the current conversation.
+"""
+    })
+
+
+# Load only recent messages
 old_messages = load_messages()
 
-# Only load recent conversation
 old_messages = old_messages[-10:]
 
 messages.extend(old_messages)
