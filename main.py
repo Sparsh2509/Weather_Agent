@@ -3,6 +3,7 @@ import json
 from dotenv import load_dotenv
 from openai import OpenAI
 from weather_tool import get_weather, get_forecast, get_air_quality
+from memory import create_database, save_message, load_messages
 
 load_dotenv()
 
@@ -57,22 +58,39 @@ tools = [
 ]
 
 # MEMORY
+create_database()
+
 messages = [
     {
         "role": "system",
         "content": """You are a weather assistant.
 You have access to weather tools.
+
 Always use the available tools when the user asks for
 current weather, forecast, or air quality.
+
 Use conversation history to understand references like
 'there', 'tomorrow', 'the same city', or 'there too'.
+
+Only pass actual city names to the weather tools.
+If the user provides a state or region instead of a city,
+ask which city they mean.
+
 Do not say that you cannot access real-time data."""
     }
 ]
 
+messages.extend(load_messages())
+
 while True:
 
     user_input = input("\nYou: ")
+    save_message("user", user_input)
+
+    messages.append({
+        "role": "user",
+        "content": user_input
+    })
 
     if user_input.lower() in ["exit", "quit"]:
         print("Goodbye!")
@@ -113,11 +131,19 @@ while True:
                 result = get_air_quality(args["city"])
 
             # Save tool result in memory
+            tool_result = json.dumps(result)
+
             messages.append({
                 "role": "tool",
                 "tool_call_id": tool_call.id,
-                "content": json.dumps(result)
+                "content": tool_result
             })
+
+            save_message(
+                "tool",
+                tool_result,
+                tool_call.id
+            )
 
         # Final LLM response
         final_response = client.chat.completions.create(
@@ -134,6 +160,7 @@ while True:
         })
 
         print("Agent:", answer)
+        save_message("assistant", answer)
 
     else:
 
