@@ -22,17 +22,24 @@ def web_search(query: str):
 
         response = client.search(
             query=query,
-            max_results=5
+            max_results=3
         )
 
         results = []
 
         for item in response.get("results", []):
 
+            title = item.get("title", "")
+            content = item.get("content", "")
+            url = item.get("url", "")
+
+            # Limit content size
+            content = content[:1000]
+
             results.append({
-                "title": item.get("title", ""),
-                "content": item.get("content", ""),
-                "url": item.get("url", "")
+                "title": title,
+                "content": content,
+                "url": url
             })
 
         return results
