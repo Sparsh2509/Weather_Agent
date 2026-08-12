@@ -2,7 +2,7 @@ import os
 import json
 from dotenv import load_dotenv
 from openai import OpenAI
-from weather_tool import get_weather , get_forecast , get_air_quality
+from weather_tool import get_weather, get_forecast, get_air_quality
 
 load_dotenv()
 
@@ -20,10 +20,7 @@ tools = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "city": {
-                        "type": "string",
-                        "description": "Name of the city"
-                    }
+                    "city": {"type": "string"}
                 },
                 "required": ["city"]
             }
@@ -37,10 +34,7 @@ tools = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "city": {
-                        "type": "string",
-                        "description": "Name of the city"
-                    }
+                    "city": {"type": "string"}
                 },
                 "required": ["city"]
             }
@@ -54,10 +48,7 @@ tools = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "city": {
-                        "type": "string",
-                        "description": "Name of the city"
-                    }
+                    "city": {"type": "string"}
                 },
                 "required": ["city"]
             }
@@ -65,6 +56,7 @@ tools = [
     }
 ]
 
+# MEMORY
 messages = [
     {
         "role": "system",
@@ -72,50 +64,82 @@ messages = [
 You have access to weather tools.
 Always use the available tools when the user asks for
 current weather, forecast, or air quality.
+Use conversation history to understand references like
+'there', 'tomorrow', 'the same city', or 'there too'.
 Do not say that you cannot access real-time data."""
-    },
-    {
-        "role": "user",
-        "content": input("You: ")
     }
 ]
 
-response = client.chat.completions.create(
-    model="llama-3.3-70b-versatile",
-    messages=messages,
-    tools=tools,
-    tool_choice="auto"
-)
+while True:
 
-message = response.choices[0].message
-print("Tool calls:", message.tool_calls)
+    user_input = input("\nYou: ")
 
-if message.tool_calls:
-    messages.append(message)
+    if user_input.lower() in ["exit", "quit"]:
+        print("Goodbye!")
+        break
 
-    for tool_call in message.tool_calls:
-        if tool_call.function.name == "get_weather":
+    # Add user message to memory
+    messages.append({
+        "role": "user",
+        "content": user_input
+    })
+
+    # First LLM call
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=messages,
+        tools=tools,
+        tool_choice="auto"
+    )
+
+    message = response.choices[0].message
+
+    if message.tool_calls:
+
+        # Save assistant's tool-call message
+        messages.append(message)
+
+        for tool_call in message.tool_calls:
+
             args = json.loads(tool_call.function.arguments)
-            result = get_weather(args["city"])
 
-        elif tool_call.function.name == "get_forecast":
-            args = json.loads(tool_call.function.arguments)
-            result = get_forecast(args["city"])
-        elif tool_call.function.name == "get_air_quality":
-            args = json.loads(tool_call.function.arguments)
-            result = get_air_quality(args["city"])
+            if tool_call.function.name == "get_weather":
+                result = get_weather(args["city"])
+
+            elif tool_call.function.name == "get_forecast":
+                result = get_forecast(args["city"])
+
+            elif tool_call.function.name == "get_air_quality":
+                result = get_air_quality(args["city"])
+
+            # Save tool result in memory
             messages.append({
                 "role": "tool",
                 "tool_call_id": tool_call.id,
                 "content": json.dumps(result)
             })
 
-    final_response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=messages
-    )
+        # Final LLM response
+        final_response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=messages
+        )
 
-    print("Agent:", final_response.choices[0].message.content)
+        answer = final_response.choices[0].message.content
 
-else:
-    print("Agent:", message.content)
+        # Save final assistant response in memory
+        messages.append({
+            "role": "assistant",
+            "content": answer
+        })
+
+        print("Agent:", answer)
+
+    else:
+
+        messages.append({
+            "role": "assistant",
+            "content": message.content
+        })
+
+        print("Agent:", message.content)
