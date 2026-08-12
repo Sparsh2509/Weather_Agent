@@ -2,8 +2,18 @@ import os
 import json
 from dotenv import load_dotenv
 from openai import OpenAI
-from weather_tool import get_weather, get_forecast, get_air_quality
-from memory import create_database, save_message, load_messages
+
+from weather_tool import (
+    get_weather,
+    get_forecast,
+    get_air_quality
+)
+
+from memory import (
+    create_database,
+    save_message,
+    load_messages
+)
 
 load_dotenv()
 
@@ -21,7 +31,9 @@ tools = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "city": {"type": "string"}
+                    "city": {
+                        "type": "string"
+                    }
                 },
                 "required": ["city"]
             }
@@ -35,7 +47,9 @@ tools = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "city": {"type": "string"}
+                    "city": {
+                        "type": "string"
+                    }
                 },
                 "required": ["city"]
             }
@@ -49,7 +63,9 @@ tools = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "city": {"type": "string"}
+                    "city": {
+                        "type": "string"
+                    }
                 },
                 "required": ["city"]
             }
@@ -57,13 +73,18 @@ tools = [
     }
 ]
 
-# MEMORY
+
+# ---------------- DATABASE ----------------
+
 create_database()
 
-messages = [
-    {
-        "role": "system",
-        "content": """You are a weather assistant.
+
+# ---------------- SYSTEM PROMPT ----------------
+
+system_message = {
+    "role": "system",
+    "content": """You are a weather assistant.
+
 You have access to weather tools.
 
 Always use the available tools when the user asks for
@@ -77,32 +98,43 @@ If the user provides a state or region instead of a city,
 ask which city they mean.
 
 Do not say that you cannot access real-time data."""
-    }
-]
+}
 
-messages.extend(load_messages())
+
+# ---------------- LOAD MEMORY ----------------
+
+messages = [system_message]
+
+old_messages = load_messages()
+
+messages.extend(old_messages)
+
+
+# ---------------- CHAT LOOP ----------------
 
 while True:
 
     user_input = input("\nYou: ")
-    save_message("user", user_input)
-
-    messages.append({
-        "role": "user",
-        "content": user_input
-    })
 
     if user_input.lower() in ["exit", "quit"]:
         print("Goodbye!")
         break
 
-    # Add user message to memory
+
+    # Save user message
     messages.append({
         "role": "user",
         "content": user_input
     })
 
-    # First LLM call
+    save_message(
+        role="user",
+        content=user_input
+    )
+
+
+    # ---------------- FIRST LLM CALL ----------------
+
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=messages,
@@ -112,40 +144,98 @@ while True:
 
     message = response.choices[0].message
 
+
+    # ---------------- TOOL CALL ----------------
+
     if message.tool_calls:
 
-        # Save assistant's tool-call message
-        messages.append(message)
+        # Convert assistant message into dictionary
+        assistant_message = {
+            "role": "assistant",
+            "content": message.content
+        }
+
+        tool_calls_for_memory = []
 
         for tool_call in message.tool_calls:
 
-            args = json.loads(tool_call.function.arguments)
+            tool_call_data = {
+                "id": tool_call.id,
+                "type": "function",
+                "function": {
+                    "name": tool_call.function.name,
+                    "arguments": tool_call.function.arguments
+                }
+            }
+
+            tool_calls_for_memory.append(tool_call_data)
+
+        assistant_message["tool_calls"] = tool_calls_for_memory
+
+        messages.append(assistant_message)
+
+        save_message(
+            role="assistant",
+            content=message.content,
+            tool_calls=tool_calls_for_memory
+        )
+
+
+        # ---------------- EXECUTE TOOLS ----------------
+
+        for tool_call in message.tool_calls:
+
+            args = json.loads(
+                tool_call.function.arguments
+            )
 
             if tool_call.function.name == "get_weather":
-                result = get_weather(args["city"])
+
+                result = get_weather(
+                    args["city"]
+                )
 
             elif tool_call.function.name == "get_forecast":
-                result = get_forecast(args["city"])
+
+                result = get_forecast(
+                    args["city"]
+                )
 
             elif tool_call.function.name == "get_air_quality":
-                result = get_air_quality(args["city"])
 
-            # Save tool result in memory
+                result = get_air_quality(
+                    args["city"]
+                )
+
+            else:
+
+                result = {
+                    "error": "Unknown tool"
+                }
+
+
+            # Convert result to JSON
             tool_result = json.dumps(result)
 
+
+            # Add to current context
             messages.append({
                 "role": "tool",
                 "tool_call_id": tool_call.id,
                 "content": tool_result
             })
 
+
+            # Save tool result
             save_message(
-                "tool",
-                tool_result,
-                tool_call.id
+                role="tool",
+                content=tool_result,
+                tool_call_id=tool_call.id
             )
 
-        # Final LLM response
+
+        # ---------------- FINAL LLM CALL ----------------
+
         final_response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=messages
@@ -153,20 +243,35 @@ while True:
 
         answer = final_response.choices[0].message.content
 
-        # Save final assistant response in memory
+
+        # Add final answer to context
         messages.append({
             "role": "assistant",
             "content": answer
         })
 
+
+        # Save final answer
+        save_message(
+            role="assistant",
+            content=answer
+        )
+
+
         print("Agent:", answer)
-        save_message("assistant", answer)
+
 
     else:
 
+        # No tool required
         messages.append({
             "role": "assistant",
             "content": message.content
         })
+
+        save_message(
+            role="assistant",
+            content=message.content
+        )
 
         print("Agent:", message.content)
