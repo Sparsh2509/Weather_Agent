@@ -104,20 +104,26 @@ system_message = {
     "role": "system",
     "content": """You are a weather assistant.
 
-You have access to weather tools.
+You have access to these tools:
 
-Always use the available tools when the user asks for
-current weather, forecast, or air quality.
+1. get_weather - current weather
+2. get_forecast - future weather forecast
+3. get_air_quality - current air quality
+4. web_search - latest or recent information from the web
+
+Always use get_weather for current weather.
+Always use get_forecast for forecasts.
+Always use get_air_quality for AQI.
+Use web_search for latest, recent, news, or changing information.
+
+When a user asks for multiple things, you may call multiple tools.
+For example, if the user asks for current weather and latest weather news,
+call both get_weather and web_search.
 
 Use conversation history to understand references like
-'there', 'tomorrow', 'the same city', or 'there too'.
+'there', 'tomorrow', 'same city', or 'there too'.
 
-Only pass actual city names to the weather tools.
-If the user provides a state or region instead of a city,
-ask which city they mean.
-
-Use web_search when the user asks for latest,
-recent, current news, or information that may have changed.
+Only pass actual city names to weather tools.
 
 Do not say that you cannot access real-time data."""
 }
@@ -165,6 +171,7 @@ while True:
     )
 
     message = response.choices[0].message
+    print("TOOL CALLS:", message.tool_calls)
 
 
     # ---------------- TOOL CALL ----------------
