@@ -1,7 +1,12 @@
 import os
-import json
+
 from dotenv import load_dotenv
-from openai import OpenAI
+
+from langchain_groq import ChatGroq
+from langchain_core.tools import tool
+from langchain_core.messages import SystemMessage
+from langgraph.graph import StateGraph, MessagesState, START
+from langgraph.prebuilt import ToolNode, tools_condition
 
 from weather_tool import (
     get_weather,
@@ -9,369 +14,273 @@ from weather_tool import (
     get_air_quality
 )
 
+from search_tool import web_search
+
 from memory import (
     create_database,
     save_message,
-    load_messages,
-    save_summary,
-    load_summary
+    load_messages
 )
 
-from search_tool import web_search
-
-
-# =========================
 # LOAD ENVIRONMENT
-# =========================
-
 load_dotenv()
 
-
-# =========================
-# GROQ CLIENT
-# =========================
-
-client = OpenAI(
-    api_key=os.getenv("GROQ_API_KEY"),
-    base_url="https://api.groq.com/openai/v1"
-)
-
-
-# =========================
-# TOOLS
-# =========================
-
-tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "get_weather",
-            "description": "Get current weather information for a city.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "city": {
-                        "type": "string",
-                        "description": "Name of the city"
-                    }
-                },
-                "required": ["city"]
-            }
-        }
-    },
-
-    {
-        "type": "function",
-        "function": {
-            "name": "get_forecast",
-            "description": "Get future weather forecast for a city.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "city": {
-                        "type": "string",
-                        "description": "Name of the city"
-                    }
-                },
-                "required": ["city"]
-            }
-        }
-    },
-
-    {
-        "type": "function",
-        "function": {
-            "name": "get_air_quality",
-            "description": "Get current air quality information for a city.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "city": {
-                        "type": "string",
-                        "description": "Name of the city"
-                    }
-                },
-                "required": ["city"]
-            }
-        }
-    },
-
-    {
-        "type": "function",
-        "function": {
-            "name": "web_search",
-            "description": "Search the web for current, latest, recent or news information.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Search query"
-                    }
-                },
-                "required": ["query"]
-            }
-        }
-    }
-]
-
-
-# =========================
-# DATABASE
-# =========================
-
+# CREATE DATABASE
 create_database()
 
+# GROQ LLM
+llm = ChatGroq(
+    model="llama-3.3-70b-versatile",
+    temperature=0,
+    api_key=os.getenv("GROQ_API_KEY")
+)
 
-# =========================
+# TOOLS
+@tool
+def weather_tool(city: str):
+    """Get current weather information for a city."""
+    
+    return get_weather(city)
+
+
+@tool
+def forecast_tool(city: str):
+    """Get future weather forecast information for a city."""
+    
+    return get_forecast(city)
+
+
+@tool
+def air_quality_tool(city: str):
+    """Get current air quality information for a city."""
+    
+    return get_air_quality(city)
+
+
+@tool
+def search_tool(query: str):
+    """Search the web for current, latest, recent or news information."""
+    
+    return web_search(query)
+
+# TOOL LIST
+tools = [
+    weather_tool,
+    forecast_tool,
+    air_quality_tool,
+    search_tool
+]
+
+# BIND TOOLS TO LLM
+llm_with_tools = llm.bind_tools(tools)
+
 # SYSTEM PROMPT
-# =========================
-
-system_message = {
-    "role": "system",
-    "content": """
+system_prompt = """
 You are a weather assistant.
+
+You can understand:
+
+- English
+- Hindi
+- Hinglish
+
+Understand the user's intent regardless of how the
+question is phrased.
 
 You have access to these tools:
 
-1. get_weather - current weather
-2. get_forecast - future weather forecast
-3. get_air_quality - current air quality
-4. web_search - latest, recent, news or changing information
+1. weather_tool
+   - current weather
 
-Rules:
+2. forecast_tool
+   - future weather forecast
 
-- Always use get_weather for current weather.
-- Always use get_forecast for future weather.
-- Always use get_air_quality for AQI.
-- Use web_search for latest, recent, news or changing information.
-- When the user asks for multiple things, use all required tools.
-- You can call multiple tools when necessary.
-- Use conversation history to understand words like:
-  'there', 'waha', 'same city', 'tomorrow', 'there too'.
-- Only pass actual city names to weather tools.
+3. air_quality_tool
+   - current AQI and air quality
+
+4. search_tool
+   - latest, recent, news or changing information
+
+
+TOOL RULES:
+
+- Always use weather_tool for current weather.
+- Always use forecast_tool for forecast requests.
+- Always use air_quality_tool for AQI or air quality.
+- Use search_tool for latest, recent, news or changing information.
+
+- When the user asks for multiple things,
+  use all required tools.
+
+- You may call multiple tools for a single question.
+
+
+CONVERSATION:
+
+Use the conversation history to understand references such as:
+
+- there
+- waha
+- same city
+- same place
+- there too
+- tomorrow
+
+
+LOCATION:
+
+Weather tools require an actual city name.
+
+Only pass city names to weather tools.
+
+If the user gives a state or region instead of a city,
+ask which city they mean.
+
+Do not directly pass a state name as a city.
+
+
+LANGUAGE:
+
+- If the user speaks English, respond in English.
+- If the user speaks Hindi, respond in Hindi.
+- If the user speaks Hinglish, respond naturally in Hinglish.
+
+
+ANSWER:
+
+- Answer only what the user asks.
+- Do not provide unnecessary information.
+- Do not provide a full forecast unless the user asks for it.
 - Do not claim that you cannot access real-time information.
 """
-}
+
+# AGENT NODE
+def agent(state: MessagesState):
+
+    messages = [
+        SystemMessage(content=system_prompt)
+    ] + state["messages"]
+
+    try:
+
+        response = llm_with_tools.invoke(messages)
+
+        print("TOOL CALLS:", response.tool_calls)
+
+        return {
+            "messages": [response]
+        }
+
+    except Exception as e:
+
+        print("Agent Error:", e)
+
+        return {
+            "messages": []
+        }
 
 
-# =========================
-# LOAD PREVIOUS MEMORY
-# =========================
 
-messages = [system_message]
+# TOOL NODE
+tool_node = ToolNode(tools)
 
-# Load old conversation summary
-summary = load_summary()
-
-if summary:
-    messages.append({
-        "role": "system",
-        "content": f"""
-Previous conversation summary:
-
-{summary}
-
-Use this summary only when it is relevant to the current conversation.
-"""
-    })
+# CREATE GRAPH
+graph = StateGraph(MessagesState)
 
 
-# Load only recent messages
+
+# ADD NODES
+graph.add_node(
+    "agent",
+    agent
+)
+
+graph.add_node(
+    "tools",
+    tool_node
+)
+
+# GRAPH START
+graph.add_edge(
+    START,
+    "agent"
+)
+
+# CONDITIONAL ROUTING
+
+graph.add_conditional_edges(
+    "agent",
+    tools_condition
+)
+
+# TOOLS → AGENT
+graph.add_edge(
+    "tools",
+    "agent"
+)
+
+# COMPILE GRAPH
+app = graph.compile()
+
+# LOAD RECENT MEMORY
 old_messages = load_messages()
 
 old_messages = old_messages[-10:]
 
-messages.extend(old_messages)
-
-
-# =========================
 # CHAT LOOP
-# =========================
-
 while True:
 
-    user_input = input("\nYou: ")
-
+    user_input = input("\nYou: ")    
+    # EXIT
     if user_input.lower() in ["exit", "quit"]:
+
         print("Goodbye!")
+
         break
 
-
-    # =========================
     # SAVE USER MESSAGE
-    # =========================
-
-    messages.append({
-        "role": "user",
-        "content": user_input
-    })
-
     save_message(
         "user",
         user_input
     )
 
+    # BUILD CURRENT CONVERSATION
+    current_messages = old_messages + [
+        {
+            "role": "user",
+            "content": user_input
+        }
+    ]    
+    # RUN LANGGRAPH
+    try:
 
-    # =====================================================
-    # AGENT LOOP
-    # =====================================================
+        result = app.invoke({
+            "messages": current_messages
+        })
+        
+        # GET FINAL MESSAGE
+        final_message = result["messages"][-1]
 
-    while True:
+        answer = final_message.content
+        
+        # SAVE ASSISTANT RESPONSE
+        save_message(
+            "assistant",
+            answer
+        )
+        
+        # UPDATE RECENT MEMORY
+        old_messages = load_messages()
 
-        # =========================
-        # ASK LLM
-        # =========================
+        old_messages = old_messages[-10:]
+        
+        # PRINT ANSWER
+        print("Agent:", answer)
 
-        try:
+    except Exception as e:
 
-            response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=messages,
-                tools=tools,
-                tool_choice="auto"
-            )
+        print("Agent Error:", e)
 
-        except Exception as e:
-
-            print("Agent Error:", e)
-
-            print(
-                "Agent: Sorry, I couldn't process that request right now."
-            )
-
-            break
-
-        message = response.choices[0].message
-        print("TOOL CALLS:", message.tool_calls)
-
-
-        # =========================
-        # CHECK TOOL CALLS
-        # =========================
-
-        if not message.tool_calls:
-
-            # LLM has final answer
-            answer = message.content
-
-            messages.append({
-                "role": "assistant",
-                "content": answer
-            })
-
-            save_message(
-                "assistant",
-                answer
-            )
-
-            print("Agent:", answer)
-
-            break
-
-
-        # =========================
-        # ADD ASSISTANT TOOL CALL
-        # =========================
-
-        messages.append(message)
-
-
-        # =========================
-        # EXECUTE ALL TOOL CALLS
-        # =========================
-
-        for tool_call in message.tool_calls:
-
-            try:
-
-                args = json.loads(
-                    tool_call.function.arguments
-                )
-
-
-                # -------------------------
-                # WEATHER
-                # -------------------------
-
-                if tool_call.function.name == "get_weather":
-
-                    result = get_weather(
-                        args["city"]
-                    )
-
-
-                # -------------------------
-                # FORECAST
-                # -------------------------
-
-                elif tool_call.function.name == "get_forecast":
-
-                    result = get_forecast(
-                        args["city"]
-                    )
-
-
-                # -------------------------
-                # AIR QUALITY
-                # -------------------------
-
-                elif tool_call.function.name == "get_air_quality":
-
-                    result = get_air_quality(
-                        args["city"]
-                    )
-
-
-                # -------------------------
-                # WEB SEARCH
-                # -------------------------
-
-                elif tool_call.function.name == "web_search":
-
-                    result = web_search(
-                        args["query"]
-                    )
-
-
-                # -------------------------
-                # UNKNOWN TOOL
-                # -------------------------
-
-                else:
-
-                    result = {
-                        "error": "Unknown tool"
-                    }
-
-
-            except Exception as e:
-
-                result = {
-                    "error": str(e)
-                }
-
-
-            # =========================
-            # CONVERT RESULT TO JSON
-            # =========================
-
-            tool_result = json.dumps(
-                result
-            )
-
-
-            # =========================
-            # SEND TOOL RESULT TO LLM
-            # =========================
-
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tool_call.id,
-                "content": tool_result
-            })
-
-
-    # =====================================================
-    # AGENT LOOP ENDS HERE
-    # =====================================================
+        print(
+            "Agent: Sorry, I couldn't process that request right now."
+        )
