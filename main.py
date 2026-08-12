@@ -161,6 +161,9 @@ messages = [system_message]
 
 old_messages = load_messages()
 
+# Only load recent conversation
+old_messages = old_messages[-10:]
+
 messages.extend(old_messages)
 
 
