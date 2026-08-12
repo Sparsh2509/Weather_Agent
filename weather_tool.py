@@ -43,31 +43,39 @@ def get_weather(city: str):
 
 
 def get_forecast(city: str):
-    url = "https://api.openweathermap.org/data/2.5/forecast"
+    try:
+        url = "https://api.openweathermap.org/data/2.5/forecast"
 
-    params = {
-        "q": city,
-        "appid": API_KEY,
-        "units": "metric"
-    }
-
-    response = requests.get(url, params=params)
-
-    if response.status_code != 200:
-        return {
-            "error": response.json().get("message", "Forecast API error")
+        params = {
+            "q": city,
+            "appid": API_KEY,
+            "units": "metric"
         }
 
-    data = response.json()
+        response = requests.get(url, params=params, timeout=10)
 
-    forecast = []
+        if response.status_code != 200:
+            return {
+                "error": response.json().get(
+                    "message",
+                    "Forecast API error"
+                )
+            }
 
-    for item in data["list"][:8]:
-        forecast.append({
-            "time": item["dt_txt"],
-            "temperature": item["main"]["temp"],
-            "weather": item["weather"][0]["description"]
-        })
+        data = response.json()
 
-    return forecast
+        forecast = []
 
+        for item in data["list"][:8]:
+            forecast.append({
+                "time": item["dt_txt"],
+                "temperature": item["main"]["temp"],
+                "weather": item["weather"][0]["description"]
+            })
+
+        return forecast
+
+    except requests.RequestException as e:
+        return {
+            "error": f"Forecast API request failed: {str(e)}"
+        }
