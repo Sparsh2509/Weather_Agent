@@ -9,8 +9,8 @@ from langgraph.prebuilt import (
     tools_condition
 )
 
-from agent import agent
-from agent.tools import tools
+from core.agent import agent
+from core.tools import tools
 
 
 graph = StateGraph(MessagesState)

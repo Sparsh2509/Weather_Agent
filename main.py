@@ -2,9 +2,9 @@ import os
 
 from dotenv import load_dotenv
 
-from agent.graph import app
+from core.graph import app
 
-from agent.memory import (
+from core.memory import (
     create_database,
     save_message,
     load_messages

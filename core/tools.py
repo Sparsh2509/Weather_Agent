@@ -1,12 +1,12 @@
 from langchain_core.tools import tool
 
-from weather_tool import (
+from core.weather_tool import (
     get_weather,
     get_forecast,
     get_air_quality
 )
 
-from agent.search_tool import web_search
+from core.search_tool import web_search
 
 
 @tool

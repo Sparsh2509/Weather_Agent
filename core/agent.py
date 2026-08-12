@@ -1,20 +1,17 @@
-import os
-
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage
 
 from langgraph.graph import MessagesState
 
-from agent.tools import tools
-from agent.prompts import SYSTEM_PROMPT
+from core.tools import tools
+from core.prompts import SYSTEM_PROMPT
 
 
 llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
+    model="llama-3.1-8b-instant",
     temperature=0,
-    api_key=os.getenv("GROQ_API_KEY")
+    api_key=__import__("os").getenv("GROQ_API_KEY")
 )
-
 
 llm_with_tools = llm.bind_tools(tools)
 
