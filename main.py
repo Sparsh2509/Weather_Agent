@@ -15,6 +15,8 @@ from memory import (
     load_messages
 )
 
+from search_tool import web_search
+
 load_dotenv()
 
 client = OpenAI(
@@ -70,6 +72,23 @@ tools = [
                 "required": ["city"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the web for current or latest information.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query"
+                    }
+                },
+                "required": ["query"]
+            }
+        }
     }
 ]
 
@@ -96,6 +115,9 @@ Use conversation history to understand references like
 Only pass actual city names to the weather tools.
 If the user provides a state or region instead of a city,
 ask which city they mean.
+
+Use web_search when the user asks for latest,
+recent, current news, or information that may have changed.
 
 Do not say that you cannot access real-time data."""
 }
@@ -206,6 +228,9 @@ while True:
                 result = get_air_quality(
                     args["city"]
                 )
+            elif tool_call.function.name == "web_search":
+                result = web_search(
+                    args["query"])
 
             else:
 
