@@ -5,8 +5,8 @@ from langchain_core.messages import SystemMessage
 
 from langgraph.graph import MessagesState
 
-from tools import tools
-from prompts import SYSTEM_PROMPT
+from agent.tools import tools
+from agent.prompts import SYSTEM_PROMPT
 
 
 llm = ChatGroq(

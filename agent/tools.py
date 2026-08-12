@@ -6,7 +6,7 @@ from weather_tool import (
     get_air_quality
 )
 
-from search_tool import web_search
+from agent.search_tool import web_search
 
 
 @tool
